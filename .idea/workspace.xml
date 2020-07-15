@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="eeeb1756-56d6-4336-a37d-236f04fb0ed4" name="Default Changelist" comment="" />
+    <list default="true" id="eeeb1756-56d6-4336-a37d-236f04fb0ed4" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Models/classifier_15945993986.P" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/conn.py" beforeDir="false" afterPath="$PROJECT_DIR$/conn.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/html/api.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/html/classifier.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/html/conn.html" beforeDir="false" />
+    </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,8 +22,20 @@
       </list>
     </option>
   </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="IgnoredFileRootStore">
+    <option name="generatedRoots">
+      <set>
+        <option value="D:\College stuff\Degree\CSCI321\EzML\.idea" />
+      </set>
+    </option>
+  </component>
   <component name="ProjectId" id="1YyTWlKW0St3IpO9IJ8NkDGIcPv" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="settings.editor.selected.configurable" value="preferences.lookFeel" />
   </component>
   <component name="PyConsoleOptionsProvider">
@@ -167,6 +186,17 @@
     </task>
     <servers />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
@@ -179,7 +209,8 @@
     </breakpoint-manager>
     <watches-manager>
       <configuration name="PythonConfigurationType">
-        <watch expression="result" language="Python" />
+        <watch expression="request.json" language="Python" />
+        <watch expression="data['stoken']" language="Python" />
         <watch expression="trainingDict[&quot;tags&quot;]" language="Python" />
       </configuration>
     </watches-manager>

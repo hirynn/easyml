@@ -100,6 +100,25 @@ class Conn:
         cur.close()
         return userID
 
+    def _updatePassword(self, username: str, newPw: str) -> bool:
+        """Unused function"""
+        if not self.isConnected:
+            return False
+
+        cur = self._db.cursor()
+        pwdHash = SHA512.new(newPw.encode()).hexdigest()
+
+        retVal: bool = False
+        try:
+            cur.execute("update users set password = %s where username = %s", (pwdHash, username))
+            self._db.commit()
+            retVal = True
+        except MySQLError:
+            self._db.rollback()
+
+        cur.close()
+        return retVal
+
     def checkToken(self, sessionToken: str) -> int:
         """
         Checks to see if the session token is still valid. Default is 3 hours.
@@ -126,25 +145,6 @@ class Conn:
 
         cur.close()
         return userID
-
-    def _updatePassword(self, username: str, newPw: str) -> bool:
-        """Unused function"""
-        if not self.isConnected:
-            return False
-
-        cur = self._db.cursor()
-        pwdHash = SHA512.new(newPw.encode()).hexdigest()
-
-        retVal: bool = False
-        try:
-            cur.execute("update users set password = %s where username = %s", (pwdHash, username))
-            self._db.commit()
-            retVal = True
-        except MySQLError:
-            self._db.rollback()
-
-        cur.close()
-        return retVal
 
     def usernameExists(self, username: str) -> bool:
         """
