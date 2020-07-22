@@ -11,6 +11,11 @@ import difflib
 from PIL import Image
 import pytesseract
 import cv2
+import string
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import CountVectorizer
+from nltk.corpus import stopwords
+stopwords = stopwords.words('English')
 
 dirname = os.path.dirname(__file__)
 tesseract_path = os.path.join(dirname, 'Tesseract/')
@@ -81,12 +86,23 @@ def generateSessionToken():
     return secrets.token_urlsafe(26)
 
 
-def counter_cosine_similarity(c1, c2):
-    terms = set(c1).union(c2)
-    dotprod = sum(c1.get(k, 0) * c2.get(k, 0) for k in terms)
-    magA = math.sqrt(sum(c1.get(k, 0) ** 2 for k in terms))
-    magB = math.sqrt(sum(c2.get(k, 0) ** 2 for k in terms))
-    return dotprod / (magA * magB)
+def cleanText(text):
+    text = ''.join([word for word in text if word not in string.punctuation])
+    text = text.lower()
+    text = ' '.join([word for word in text.split() if word not in stopwords])
+
+    return [text]
+
+
+def getCosineSimilarity(baseText: str, textToCompare: str):
+    baseText = cleanText(baseText)
+    textToCompare = cleanText(textToCompare)
+    baseText.extend(textToCompare)
+    cVect = CountVectorizer().fit(baseText)
+    baseEnc = cVect.transform([baseText[0]]).reshape(1, -1)
+    toCompEnc = cVect.transform([baseText[1]]).reshape(1, -1)
+
+    return cosine_similarity(baseEnc, toCompEnc)[0][0]
 
 
 def _quicksort(arr: list, low: int, high: int):
@@ -131,7 +147,7 @@ def _separateTags(tagStr: str) -> list:
     :param tagStr: Concat tag as string, e.g. '['1', '3', '5', '4', '6', '8']'
     :return: List of tag as list, e.g. ['1', '3', '5', '4', '6', '8']
     """
-    _pattern = "([\\w\\d\\ ]+)"
+    _pattern = "([\\w\\d\\ \\-]+)"
     return re.findall(_pattern, tagStr)
 
 

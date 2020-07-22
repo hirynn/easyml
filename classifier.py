@@ -8,6 +8,7 @@ from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import pos_tag
 from nltk.stem import WordNetLemmatizer
 from sklearn.linear_model import SGDClassifier
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.multiclass import OneVsOneClassifier
 from sklearn.preprocessing import LabelEncoder
 from collections import defaultdict
@@ -31,6 +32,7 @@ class Classifier:
     Wrapper class for model. Exposes two functions, train and predict.
     """
     _model: OneVsOneClassifier
+    _modelTags: dict
     _labelDict: dict
     _Encoder: LabelEncoder
     _hashVect: HashingVectorizer
@@ -67,7 +69,7 @@ class Classifier:
                 modelName += PICKLE_FILE_EXTENSION
             self.modelName = modelName
             self.savePath = model_folder + self.modelName
-            self._model = self._loadModel(self.savePath)
+            self._model, self._modelTags = self._loadModel(self.savePath)
         else:
             self.modelName = "classifier_" + getEpochIdentifier() + PICKLE_FILE_EXTENSION
             self.savePath = model_folder + self.modelName
@@ -81,7 +83,7 @@ class Classifier:
         for sents in self._labelAll:
             self.train(text='', sentiment=sents)
 
-    def train(self, text: str or list, sentiment: str, returnProcessedText=False, fromDB=False):
+    def train(self, text: str or list, sentiment: str, tags=None, returnProcessedText=False, fromDB=False):
         """
         Wrapper method that trains the model on only a single data. Set fromDB = True if the data is from the database.
 
@@ -98,18 +100,21 @@ class Classifier:
                 text = self._preprocessFromDB(text)
             text = self._getSeriesFromList(text)
 
-        self._saveModel(self._train(text, sentiment), self.savePath)
+        if type(tags) is str:
+            tags = list(filter(' '.__ne__, _separateTags(tags)))
+
+        self._saveModel(self._train(text, sentiment, tags), self.savePath)
 
         if returnProcessedText:
             text = list(text)
             return text
 
-    def predict(self, rawText: str) -> str:
+    def predict(self, rawText: str):
         """
         Wrapper method that predicts a single piece of data.
 
         :param rawText: The raw (unprocessed) text to predict on.
-        :return: The sentiment of the predicted text.
+        :return: The sentiment of the predicted text and the tags.
         """
         processedText = self._preprocessText(rawText)
 
@@ -189,8 +194,9 @@ class Classifier:
         """
         Wrapper method to initialize a first time user. Creates a new model and saves the model.
         """
-        self._model = self._makeNewModel()
-        self._saveModel(self._model, self.savePath)
+        self._model = self._makeNewClassifier()
+        self._modelTags = dict()
+        self._saveModel([self._model, self._modelTags], self.savePath)
 
     @staticmethod
     def _strip_html(text: str):
@@ -204,13 +210,23 @@ class Classifier:
         return soup.getText()
 
     @staticmethod
-    def _makeNewModel():
+    def _makeNewClassifier():
         """
         Makes a new model using OneVsOne classification. Model is a Logistic Regression algorithm fitted with SGD.
 
         :return: A OneVsOneClassifier object.
         """
         return OneVsOneClassifier(SGDClassifier(loss='log', penalty='l2', max_iter=150, learning_rate='optimal', eta0=0.00, alpha=1e-04))
+
+    def _makeNewModelDict(self, tags):
+        """
+        Creates a dict and initializes into the modelTags using the tag name as the key and the corresponding model as the value.\n
+        The model is a binary class where class [0] is the tag (positive class) and class [1] is not the tag (negative class).
+        For N number of tags, this dict will have N number of key-value pairs. This dict is essentially multiple OneVsRestClassifiers in one list.\n
+        :param tags: List of string tags.
+        """
+        for eachTag in tags:
+            self._modelTags[eachTag] = MultinomialNB()
 
     @staticmethod
     def _saveModel(save_classifier, _filename):
@@ -233,12 +249,12 @@ class Classifier:
         :return: The loaded model/classifier.
         """
         loadFile = open(_filename, 'rb')
-        load_classifier = pickle.load(loadFile)
+        classifier, modelTags = pickle.load(loadFile)
         loadFile.close()
 
-        return load_classifier
+        return classifier, modelTags
 
-    def _train(self, _text, _sentiment):
+    def _train(self, _text, _sentiment, userTags):
         """
         The inner method for training the model. The model is trained using partial_fit function.
 
@@ -252,7 +268,30 @@ class Classifier:
 
         self._model.partial_fit(X_new, [encSentiment], self._Encoder.transform(self._Encoder.classes_))
 
-        return self._model
+        # if not training the tag model
+        if userTags is None:
+            return self._model, self._modelTags
+
+        # check if modelTags contain any existing tag classes
+        # if yes, check if user added any new tags
+        if len(self._modelTags.keys()) != 0:
+            newTags = list(set(self._modelTags.keys()) - set(userTags))
+
+            # adds the new tag to the dict and add a new model if there are new tags
+            if len(newTags) != 0:
+                for eachNewTag in newTags:
+                    self._modelTags[eachNewTag] = MultinomialNB()
+        else:  # if modelTag doesn't contain any tag classes, initialize it
+            for eachTag in userTags:
+                self._modelTags[eachTag] = MultinomialNB()
+
+        for eachTag in self._modelTags:
+            if eachTag in userTags:
+                self._modelTags[eachTag].partial_fit(X_new, [0], [0, 1])
+            else:
+                self._modelTags[eachTag].partial_fit(X_new, [1], [0, 1])
+
+        return self._model, self._modelTags
 
     def _predict(self, _text):
         """
@@ -263,4 +302,11 @@ class Classifier:
         """
         X_new = self._hashVect.transform(_text)
 
-        return getDictKey(self._labelDict, self._model.predict(X_new))
+        sentiment = getDictKey(self._labelDict, self._model.predict(X_new))
+        retTags = list()
+
+        for eachTag in self._modelTags:
+            if self._modelTags[eachTag].predict(X_new) == [0]:
+                retTags.append(eachTag)
+
+        return sentiment, retTags

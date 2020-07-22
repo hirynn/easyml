@@ -2,7 +2,7 @@ import flask
 import uuid
 import os
 from flask import request, jsonify
-from functions import getFileBase64, getOcr, readTextFileContents, getSuggestedTags, getDictKey, fileExists, generateSessionToken
+from functions import getFileBase64, getOcr, readTextFileContents, getSuggestedTags, getDictKey, fileExists, generateSessionToken, getCosineSimilarity
 from conn import Conn
 from classifier import Classifier
 from strings import *
@@ -251,7 +251,7 @@ def retrain():
     # make a new model
     model = Classifier(makeNewModel=True)
     for eachData in availableTraining:
-        model.train(text=eachData[2], sentiment=eachData[3], fromDB=True)
+        model.train(text=eachData[2], sentiment=eachData[3], tags=eachData[4], fromDB=True)
 
     # update db with new model info
     if not con.updateModelInfo(oldModelID, modelName=model.modelName):
@@ -370,6 +370,7 @@ def getOCRtext():
                 'data': None
             }), 400
 
+    data = request.json
     noMissingData, data = getRequiredParameters(request, stoken='', datatype='', data='', action='')
 
     if not noMissingData:
@@ -559,7 +560,8 @@ def processTeach():
                 'data': None
             }), 400
 
-    noMissingData, data = getRequiredParameters(request, stoken='', action='', datatype='', data='', sentiment='', tags='')
+    data = request.json
+    """noMissingData, data = getRequiredParameters(request, stoken='', action='', datatype='', data='', sentiment='', tags='')
 
     if not noMissingData:
         return jsonify(
@@ -568,7 +570,7 @@ def processTeach():
                     {'message': 'Missing required parameter \'' + data + '\'',
                      'error': True},
                 'data': None
-            }), 400
+            }), 400"""
 
     con = Conn()
     userID = con.checkToken(data['stoken'])
@@ -628,7 +630,7 @@ def processTeach():
 
         modelID, modelName = con.getModelInfo(str(userID))
         model = Classifier(makeNewModel=False, modelName=modelName)
-        processedText = model.train(text=txtdata, sentiment=data['sentiment'], returnProcessedText=True)
+        processedText = model.train(text=txtdata, sentiment=data['sentiment'], tags=tags, returnProcessedText=True)
 
         con.addNewTraining(modelID=modelID, tags=tags, sentiment=data['sentiment'], processedText=processedText,
                            rawText=txtdata)
@@ -685,7 +687,7 @@ def processTeach():
             for eachFile in files:
                 txtdata = readTextFileContents(eachFile, return_metadata=False)
                 os.remove(eachFile)  # remove temp file
-                processedText = model.train(text=txtdata, sentiment=data['sentiment'], returnProcessedText=True)
+                processedText = model.train(text=txtdata, sentiment=data['sentiment'], tags=tags, returnProcessedText=True)
                 con.addNewTraining(modelID=modelID, tags=tags, sentiment=data['sentiment'],
                                    processedText=processedText, rawText=txtdata)
 
@@ -724,7 +726,7 @@ def processTeach():
 
             txtdata = readTextFileContents(filepath, return_metadata=False)
             os.remove(filepath)  # remove temp file
-            processedText = model.train(text=txtdata, sentiment=data['sentiment'],
+            processedText = model.train(text=txtdata, sentiment=data['sentiment'], tags=tags,
                                         returnProcessedText=True)
             con.addNewTraining(modelID=modelID, tags=tags, sentiment=data['sentiment'],
                                processedText=processedText, rawText=txtdata)
@@ -758,7 +760,8 @@ def processAsk():
                 'data': None
             }), 400
 
-    noMissingData, data = getRequiredParameters(request, stoken='', action='', datatype='', data='', tags='')
+    data = request.json
+    noMissingData, data = getRequiredParameters(request, stoken='', action='', datatype='', data='')
 
     if not noMissingData:
         return jsonify(
@@ -812,29 +815,30 @@ def processAsk():
                 }), 400
 
         modelID, modelName = con.getModelInfo(str(userID))
-        model = Classifier(makeNewModel=False, modelName=modelName)
 
-        predSentiment = model.predict(txtdata)
+        availTraining = con.getAvailableTraining(modelID)
 
-        # get related tags
-        userTags = request.json['tags']
-        returnNumber = request.args.get("howMany") if request.args.get(
-            "howMany") is not None else DEFAULT_RETURN_SUGGESTED_TAGS
-        delim = request.args.get("delim") if request.args.get("delim") is not None else ","
+        ifPrevKnowSimilar = False
+        for eachTraining in availTraining:
+            if getCosineSimilarity(txtdata, eachTraining[1]) >= PREVIOUS_KNOWLEDGE_SIMILARITY_RATE:
+                ifPrevKnowSimilar = True
+                break
 
-        if type(userTags) == str:
-            userTags = list(userTags.split(delim))
-        elif type(userTags) != list:
+        if not ifPrevKnowSimilar:
             return jsonify(
                 {
-                    'status':
-                        {'error': True,
-                         'message': "Wrong format for tags. Allowed formats are either string or lists in square brackets."},
-                    'data': None
-                }), 400
+                    'status': RETURN_SUCCESS_STATUS,
+                    'data':
+                        {
+                            'predictedSentiment': "Not available",
+                            'suggested': "Not available",
+                            'text': txtdata
+                        }
+                }), 200
 
-        tagsFromDB = con.getTags(modelID=modelID)
-        relatedTags = getSuggestedTags(userTags, tagsFromDB, returnNumber)
+        model = Classifier(makeNewModel=False, modelName=modelName)
+
+        predSentiment, retTags = model.predict(txtdata)
 
         return jsonify(
             {
@@ -842,7 +846,7 @@ def processAsk():
                 'data':
                     {
                         'predictedSentiment': predSentiment,
-                        'suggested': relatedTags,
+                        'suggested': retTags,
                         'text': txtdata
                     }
             }), 200
@@ -861,6 +865,7 @@ def processAsk():
             model = Classifier(makeNewModel=False, modelName=modelName)
 
             predSentiment = list()
+            retTags = list()
             for item in data['data']:
                 filename = str(uuid.uuid4())  # generate temp file name
                 status, filepath = getFileBase64(item, filename)
@@ -885,34 +890,17 @@ def processAsk():
                         }), 400
 
                 textData = readTextFileContents(filepath)
-                predSentiment.append(model.predict(textData))
+                sent, tag = model.predict(textData)
+                predSentiment.append(sent)
+                retTags.append(tag)
                 os.remove(filepath)
 
-            # get related tags
-            userTags = data['tags']
-            returnNumber = request.args.get("howMany") if request.args.get(
-                "howMany") is not None else DEFAULT_RETURN_SUGGESTED_TAGS
-            delim = request.args.get("delim") if request.args.get("delim") is not None else ","
-
-            if type(userTags) == str:
-                userTags = list(userTags.split(delim))
-            elif type(userTags) != list:
-                return jsonify(
-                    {
-                        'status':
-                            {'error': True,
-                             'message': "Wrong format for tags. Allowed formats are either string or lists in square brackets."},
-                        'data': None
-                    }), 400
-
-            tagsFromDB = con.getTags(modelID=modelID)
-            relatedTags = getSuggestedTags(userTags, tagsFromDB, returnNumber)
             return jsonify(
                 {
                     'status': RETURN_SUCCESS_STATUS,
                     'data':
                         {'predictedSentiment': predSentiment,
-                         'suggested': relatedTags,
+                         'suggested': retTags,
                          'text': data['data']}
                 }), 200
         elif type(data['data']) == str:  # if single file
@@ -936,33 +924,14 @@ def processAsk():
             textData = readTextFileContents(filepath)
             os.remove(filepath)
 
-            predSentiment = model.predict(textData)
+            predSentiment, retTags = model.predict(textData)
 
-            # get related tags
-            userTags = data['tags']
-            returnNumber = request.args.get("howMany") if request.args.get(
-                "howMany") is not None else DEFAULT_RETURN_SUGGESTED_TAGS
-            delim = request.args.get("delim") if request.args.get("delim") is not None else ","
-
-            if type(userTags) == str:
-                userTags = list(userTags.split(delim))
-            elif type(userTags) != list:
-                return jsonify(
-                    {
-                        'status':
-                            {'error': True,
-                             'message': "Wrong format for tags. Allowed formats are either string or lists in square brackets."},
-                        'data': None
-                    }), 400
-
-            tagsFromDB = con.getTags(modelID=modelID)
-            relatedTags = getSuggestedTags(userTags, tagsFromDB, returnNumber)
             return jsonify(
                 {
                     'status': RETURN_SUCCESS_STATUS,
                     'data':
                         {'predictedSentiment': predSentiment,
-                         'suggested': relatedTags,
+                         'suggested': retTags,
                          'text': data['text']}
                 }), 200
 
