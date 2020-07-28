@@ -1,6 +1,6 @@
 import os
 import pickle
-from functions import getDictKey, getEpochIdentifier, _separateTags
+from functions import getDictKey, getEpochIdentifier, separateTags
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
@@ -101,7 +101,7 @@ class Classifier:
             text = self._getSeriesFromList(text)
 
         if type(tags) is str:
-            tags = list(filter(' '.__ne__, _separateTags(tags)))
+            tags = separateTags(tags)
 
         self._saveModel(self._train(text, sentiment, tags), self.savePath)
 

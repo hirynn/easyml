@@ -140,6 +140,10 @@ def _getRelatedTags(userTagged, fromDB):
     return list(fromDB - userTagged)
 
 
+def separateTags(tagStr: str):
+    return list(filter(' '.__ne__, _separateTags(tagStr)))  # separate tags and remove all blank spaces
+
+
 def _separateTags(tagStr: str) -> list:
     """
     Gets concatenated string of tag IDs separated by delimiter character and returns list containing each item.
@@ -164,8 +168,7 @@ def getSuggestedTags(userTagged: list, tagsFromDB: list or tuple, returnNumOfTag
 
     relatedTags = []
     for item in tagsFromDB:
-        item = _separateTags(item)
-        item = list(filter(' '.__ne__, item))  # remove all blank spaces only
+        item = separateTags(item)
         if _getListSimilarity(toLower(userTagged), toLower(item)) >= TAGS_SIMILARITY_RATE:
             relatedTags.append(_getRelatedTags(userTagged, item))
 
