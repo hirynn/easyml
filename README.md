@@ -4,8 +4,8 @@ Specification: To develop a classifier that can perform sentiment analysis and c
 Algorithms used: Scikit implementation of SGD and MultinomialNB.
 
 Stack for project: 
--XAMPP
--MySQL
--Python 3.7
--SciKit
--Flask
+- XAMPP
+- MySQL
+- Python 3.7
+- SciKit
+- Flask
